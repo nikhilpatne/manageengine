@@ -1,0 +1,22 @@
+---
+- block:
+    - name: create patch configuration
+      gslab.manageengine.patch_configuration:
+        url: "{{ url }}"
+        port: "{{ port }}"
+        username: "{{ username }}"
+        password: "{{ password }}"
+        ip_list: "{{ ip_list }}"
+        deployment_policy: "{{ deployment_policy }}"
+        configuration_name: "{{ configuration_name }}"
+        configuration_description: "{{ configuration_description }}"
+      register: output
+
+    - name: Debug
+      debug: 
+        msg: "{{ output }}"
+
+  rescue:
+    - fail:
+        msg: "Problem While performing patch configuration"
+
