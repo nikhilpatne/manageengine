@@ -86,20 +86,24 @@ EXAMPLES = """
     configuration_name: 'MyConfiguration'
     configuration_description: 'My first configuration'
 """
-import traceback,requests,json,base64
-from requests.auth import HTTPBasicAuth 
-
+import base64
+import json
+import requests
+import traceback
+from requests.auth import HTTPBasicAuth
 from ansible.module_utils.basic import AnsibleModule, missing_required_lib
 
 resources = []
 patches = []
 
-def manageengine_auth(module,url, port, username, password):
+def manageengine_auth(module, url, port, username, password):
+    # To get manageengine authentication token.
     try:
         auth = HTTPBasicAuth(username, password)
-        enc_password = base64.b64encode(password.encode("ascii")).decode("ascii")
-        response = requests.get('http://'+url+':'+port+'/api/1.3/desktop/authentication?username='+username+'&password='+enc_password+'&auth_type=local_authentication', 
-                auth = auth)
+        enc_password = base64.b64encode(
+            password.encode("ascii")).decode("ascii")
+        response = requests.get('http://'+url+':'+port+'/api/1.3/desktop/authentication?username='+username+'&password='+enc_password+'&auth_type=local_authentication',
+                                auth=auth)
         response_content = json.loads(response.content.decode())
         token = response_content['message_response']['authentication']['auth_data']['auth_token']
         return token
@@ -107,14 +111,15 @@ def manageengine_auth(module,url, port, username, password):
         module.fail_json(msg="Failed to get token {}".format(str(e)))
 
 
-def getResources(module,token,url,port,ip_list):
+def getResources(module, token, url, port, ip_list):
+    # To get list of resource ID's of hosts.
     try:
-
         headers = {
-                'Authorization' : token
-            }
+            'Authorization': token
+        }
 
-        response = requests.get('http://'+url+':'+port+'/api/1.3/patch/allsystems', headers=headers)
+        response = requests.get(
+            'http://'+url+':'+port+'/api/1.3/patch/allsystems', headers=headers)
         response_content = json.loads(response.content.decode())
         for system in response_content['message_response']['allsystems']:
             if system['ip_address'] in ip_list:
@@ -124,51 +129,49 @@ def getResources(module,token,url,port,ip_list):
         module.fail_json(msg="Failed to get resource list {}".format(str(e)))
 
 
-def getPatches(module,token,url,port):
-
+def getPatches(module, token, url, port):
+    # To get list of patch ID's of all hosts
     try:
-
         headers = {
-                'Authorization' : token
-            }
+            'Authorization': token
+        }
 
-        response = requests.get('http://'+url+':'+port+'/api/1.3/patch/allpatches?patchstatusfilter=202', headers=headers)
+        response = requests.get(
+            'http://'+url+':'+port+'/api/1.3/patch/allpatches?patchstatusfilter=202', headers=headers)
         response_content = json.loads(response.content.decode())
         for patch in response_content['message_response']['allpatches']:
-            if patch['update_name'] == "Security Updates":
-                patches.append(patch['patch_id'])
+            patches.append(patch['patch_id'])
         return patches
     except Exception as e:
         module.fail_json(msg="Failed to get patches {}".format(str(e)))
 
 
-def getDeployments(module,token,url,port,deployment_policy):
-
+def getDeployments(module, token, url, port, deployment_policy):
+    # To get deployment ID from mentioned deployment policy.
     try:
-
         headers = {
-                'Authorization' : token
-            }
+            'Authorization': token
+        }
 
-        response = requests.get('http://'+url+':'+port+'/api/1.3/patch/deploymentpolicies', headers=headers)
+        response = requests.get(
+            'http://'+url+':'+port+'/api/1.3/patch/deploymentpolicies', headers=headers)
         response_content = json.loads(response.content.decode())
         for deployment in response_content['message_response']['deploymentpolicies']:
             if deployment['template_name'] == deployment_policy:
                 return deployment['template_id']
     except Exception as e:
-        module.fail_json(msg="Failed to get deployment policy {}".format(str(e)))
+        module.fail_json(
+            msg="Failed to get deployment policy {}".format(str(e)))
 
 
-def setTargetData(module,token,url,port,resource_list):
-
+def setTargetData(module, token, url, port, resource_list):
+    # To set target data for configuration
     try:
-
         headers = {
-                'Authorization' : token,
-                'Content-Type' : 'application/patchConfig.v1+json',
-                 'Accept': 'application/patchConfig.v1+json'
-
-            }
+            'Authorization': token,
+            'Content-Type': 'application/patchConfig.v1+json',
+            'Accept': 'application/patchConfig.v1+json'
+        }
 
         body = {
             "operation":  "INSTALL",
@@ -176,10 +179,10 @@ def setTargetData(module,token,url,port,resource_list):
             "criteriaJSON":  {},
             "dcViewFilterID":  "",
             "resourceIDs": resource_list
-        }     
+        }
 
-
-        response = requests.post('http://'+url+':'+port+'/dcapi/patch/manualdeployment/patchConfig?autoPopulate=true&isOnlyApproved=false', headers=headers, data=json.dumps(body))
+        response = requests.post(
+            'http://'+url+':'+port+'/dcapi/patch/manualdeployment/patchConfig?autoPopulate=true&isOnlyApproved=false', headers=headers, data=json.dumps(body))
         response_content = json.loads(response.content.decode())
         if response_content:
             return response_content['targetData']
@@ -187,59 +190,50 @@ def setTargetData(module,token,url,port,resource_list):
         module.fail_json(msg="Failed to set targetData {}".format(str(e)))
 
 
-
-def createConfiguration(module,token,url, port,configuration_name,configuration_description,deployment_policy_id,patch_list,targetData):
-
+def createConfiguration(module, token, url, port, configuration_name, configuration_description, deployment_policy_id, patch_list, targetData):
+    # To create patch configuration
     try:
-
         headers = {
-                'Authorization' : token,
-                'Content-Type' : 'application/patchDeploy.v1+json',
-            }
+            'Authorization': token,
+            'Content-Type': 'application/patchDeploy.v1+json',
+        }
 
         body = {
-           
-    "collectionType":  1,
-    "targetData": targetData,
+            "collectionType":  1,
+            "targetData": targetData,
+            "refreshMinRetry":  1,
+            "configType":  "computer",
+            "configDetails":  [
+                {
+                    "details":  [
+                        {
+                            "patchIDs": patch_list
+                        }
+                    ],
+                    "configName":  "PATCH_INSTALL"
+                }
+            ],
+            "applyAtStartupLogon":  False,
+            "continueDeployment":  False,
+            "description": configuration_description,
+            "logonStartupMinRetry":  1,
+            "platform":  "windows",
+            "label": configuration_name,
+            "deploymentPolicyId": int(deployment_policy_id),
+            "enableRetry":  True,
+            "applyAtRefresh":  False,
+            "noOfRetries":  2,
+            "applyAlways":  False
+        }
 
-    "refreshMinRetry":  1,
-    "configType":  "computer",
-    "configDetails":  [
-                          {
-                              "details":  [
-                                              {
-                                                  "patchIDs": patch_list
-                                              }
-                                          ],
-                              "configName":  "PATCH_INSTALL"
-                          }
-                      ],
-    "applyAtStartupLogon":  False,
-    "continueDeployment":  False,
-    "description": configuration_description,
-    "logonStartupMinRetry":  1,
-    "platform":  "windows",
-    "label": configuration_name,
-    "deploymentPolicyId": int(deployment_policy_id),
-    "enableRetry":  True,
-    "applyAtRefresh":  False,
-    "noOfRetries":  2,
-    "applyAlways":  False
-
-
-   
-            }     
-
-        print("----------------------------------------------------------------------")
-        response = requests.post('http://'+url+':'+port+'/dcapi/patch/manualdeployment', headers=headers, json=body)
+        response = requests.post(
+            'http://'+url+':'+port+'/dcapi/patch/manualdeployment', headers=headers, json=body)
         response_content = json.loads(response.content.decode())
         if response_content:
             return response_content
     except Exception as e:
-        module.fail_json(msg="Failed to create patch configuration {}".format(str(e)))
-
-
-    
+        module.fail_json(
+            msg="Failed to create patch configuration {}".format(str(e)))
 
 
 def main():
@@ -249,7 +243,7 @@ def main():
             port=dict(type="str", default="8020"),
             username=dict(type="str", required=True),
             password=dict(type="str", default=None, no_log=True),
-            ip_list = dict(type="list", required=True),
+            ip_list=dict(type="list", required=True),
             deployment_policy=dict(type="str", default="Deploy any time at the earliest"),
             configuration_name=dict(type="str", required=True),
             configuration_description=dict(type="str", required=True),
@@ -268,21 +262,26 @@ def main():
     configuration_description = module.params["configuration_description"]
     state = module.params["state"]
 
-    if state == "present":
-        token = manageengine_auth(module,url, port, username, password)
-        if token:
-            resource_list = getResources(module,token,url, port,ip_list)
-            if resource_list:
-                patch_list = getPatches(module,token,url, port)
-                if patch_list:
-                    deployment_policy_id = getDeployments(module,token,url, port,deployment_policy)
-                    if deployment_policy_id:
-                        targetData = setTargetData(module,token,url, port,resource_list)
-                        if targetData:
-                            configuration_details = createConfiguration(module,token,url, port,configuration_name,configuration_description,deployment_policy_id,patch_list,targetData)
+    try:
+        if state == "present":
+            token = manageengine_auth(module, url, port, username, password)
+            if token:
+                resource_list = getResources(module, token, url, port, ip_list)
+                if resource_list:
+                    patch_list = getPatches(module, token, url, port)
+                    if patch_list:
+                        deployment_policy_id = getDeployments(
+                            module, token, url, port, deployment_policy)
+                        if deployment_policy_id:
+                            targetData = setTargetData(
+                                module, token, url, port, resource_list)
+                            if targetData:
+                                configuration_details = createConfiguration(
+                                    module, token, url, port, configuration_name, configuration_description, deployment_policy_id, patch_list, targetData)
 
-
-    module.exit_json(msg=configuration_details, changed=True)
+        module.exit_json(msg=configuration_details, changed=True)
+    except Exception as e:
+        module.exit_json(msg=str(e), changed=False)
 
 
 if __name__ == "__main__":
