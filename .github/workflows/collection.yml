@@ -11,4 +11,4 @@ jobs:
       - name: Build and Deploy collection
         uses: artis3n/ansible_galaxy_collection@v2
         with:
-          api_key: '9615fdde2d5bfe6e4de8e2bfa6833bb5c89c021f'  
+          api_key: ${{ secrets.GALAXY_TOKEN }}
